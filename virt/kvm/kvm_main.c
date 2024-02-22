@@ -3428,17 +3428,107 @@ static int next_segment(unsigned long len, int offset)
 		return len;
 }
 
-static int __kvm_read_guest_page(struct kvm_memory_slot *slot, gfn_t gfn,
-				 void *data, int offset, int len)
+#ifdef CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE
+static int __kvm_read_private_guest_page(struct kvm *kvm,
+					 struct kvm_memory_slot *slot,
+					 gfn_t gfn, void *data, int offset,
+					 int len)
 {
-	int r;
+	u64 pfn;
+	struct page *page;
+	int r = 0;
+
+	if (size_add(offset, len) > PAGE_SIZE)
+		return -E2BIG;
+
+	mutex_lock(&kvm->slots_lock);
+	if (kvm_any_range_has_memory_attribute(kvm, gfn, gfn + 1,
+		KVM_MEMORY_ATTRIBUTE_NOT_MAPPABLE)) {
+		r = -EPERM;
+		goto out_unlock;
+	}
+
+	r = kvm_gmem_get_pfn_locked(kvm, slot, gfn, &pfn, NULL);
+	if (r)
+		goto out_unlock;
+
+	page = pfn_to_page(pfn);
+	memcpy(data, page_address(page) + offset, len);
+	unlock_page(page);
+	kvm_release_pfn_clean(pfn);
+out_unlock:
+	mutex_unlock(&kvm->slots_lock);
+
+	return r;
+}
+
+static int __kvm_write_private_guest_page(struct kvm *kvm,
+					  struct kvm_memory_slot *slot,
+					  gfn_t gfn, const void *data,
+					  int offset, int len)
+{
+	u64 pfn;
+	struct page *page;
+	int r = 0;
+
+	if (size_add(offset, len) > PAGE_SIZE)
+		return -E2BIG;
+
+	mutex_lock(&kvm->slots_lock);
+	if (kvm_any_range_has_memory_attribute(kvm, gfn, gfn + 1,
+		KVM_MEMORY_ATTRIBUTE_NOT_MAPPABLE)) {
+		r = -EPERM;
+		goto out_unlock;
+	}
+
+	r = kvm_gmem_get_pfn_locked(kvm, slot, gfn, &pfn, NULL);
+	if (r)
+		goto out_unlock;
+
+	page = pfn_to_page(pfn);
+	memcpy(page_address(page) + offset, data, len);
+	unlock_page(page);
+	kvm_release_pfn_dirty(pfn);
+out_unlock:
+	mutex_unlock(&kvm->slots_lock);
+
+	return r;
+}
+#else
+static int __kvm_read_private_guest_page(struct kvm *kvm,
+					 struct kvm_memory_slot *slot,
+					 gfn_t gfn, void *data, int offset,
+					 int len)
+{
+	BUG();
+	return -EIO;
+}
+
+static int __kvm_write_private_guest_page(struct kvm *kvm,
+					  struct kvm_memory_slot *slot,
+					  gfn_t gfn, const void *data,
+					  int offset, int len)
+{
+	BUG();
+	return -EIO;
+}
+#endif /* CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE */
+
+static int __kvm_read_guest_page(struct kvm *kvm, struct kvm_memory_slot *slot,
+				 gfn_t gfn, void *data, int offset, int len)
+{
 	unsigned long addr;
+
+	if (IS_ENABLED(CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE) &&
+	    kvm_slot_can_be_private(slot)) {
+		return __kvm_read_private_guest_page(kvm, slot, gfn, data,
+						     offset, len);
+	}
 
 	addr = gfn_to_hva_memslot_prot(slot, gfn, NULL);
 	if (kvm_is_error_hva(addr))
 		return -EFAULT;
-	r = __copy_from_user(data, (void __user *)addr + offset, len);
-	if (r)
+	if (__copy_from_user(data, (void __user *)addr + offset, len))
 		return -EFAULT;
 	return 0;
 }
@@ -3448,7 +3538,7 @@ int kvm_read_guest_page(struct kvm *kvm, gfn_t gfn, void *data, int offset,
 {
 	struct kvm_memory_slot *slot = gfn_to_memslot(kvm, gfn);
 
-	return __kvm_read_guest_page(slot, gfn, data, offset, len);
+	return __kvm_read_guest_page(kvm, slot, gfn, data, offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_read_guest_page);
 
@@ -3457,7 +3547,7 @@ int kvm_vcpu_read_guest_page(struct kvm_vcpu *vcpu, gfn_t gfn, void *data,
 {
 	struct kvm_memory_slot *slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
 
-	return __kvm_read_guest_page(slot, gfn, data, offset, len);
+	return __kvm_read_guest_page(vcpu->kvm, slot, gfn, data, offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_read_guest_page);
 
@@ -3529,19 +3619,27 @@ int kvm_vcpu_read_guest_atomic(struct kvm_vcpu *vcpu, gpa_t gpa,
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_read_guest_atomic);
 
+
 static int __kvm_write_guest_page(struct kvm *kvm,
 				  struct kvm_memory_slot *memslot, gfn_t gfn,
-			          const void *data, int offset, int len)
+				  const void *data, int offset, int len)
 {
-	int r;
-	unsigned long addr;
+	if (IS_ENABLED(CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE) &&
+	    kvm_slot_can_be_private(memslot)) {
+		int r = __kvm_write_private_guest_page(kvm, memslot, gfn, data,
+						       offset, len);
 
-	addr = gfn_to_hva_memslot(memslot, gfn);
-	if (kvm_is_error_hva(addr))
-		return -EFAULT;
-	r = __copy_to_user((void __user *)addr + offset, data, len);
-	if (r)
-		return -EFAULT;
+		if (r)
+			return r;
+	} else {
+		unsigned long addr = gfn_to_hva_memslot(memslot, gfn);
+
+		if (kvm_is_error_hva(addr))
+			return -EFAULT;
+		if (__copy_to_user((void __user *)addr + offset, data, len))
+			return -EFAULT;
+	}
+
 	mark_page_dirty_in_slot(kvm, memslot, gfn);
 	return 0;
 }
