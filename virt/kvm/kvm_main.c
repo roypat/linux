@@ -52,6 +52,7 @@
 #include <linux/lockdep.h>
 #include <linux/kthread.h>
 #include <linux/suspend.h>
+#include <linux/rcupdate_wait.h>
 
 #include <asm/processor.h>
 #include <asm/ioctl.h>
@@ -2468,6 +2469,40 @@ out:
 	return has_attrs;
 }
 
+/*
+ * Returns true if _any_ gfn in the range [@start, @end) has _any_ attribute
+ * matching @attr.
+ */
+static bool kvm_any_range_has_memory_attribute(struct kvm *kvm, gfn_t start,
+					       gfn_t end, unsigned long attr)
+{
+	XA_STATE(xas, &kvm->mem_attr_array, start);
+	bool has_attr = false;
+	void *entry;
+
+	rcu_read_lock();
+	xas_for_each(&xas, entry, end - 1) {
+		if (xas_retry(&xas, entry))
+			continue;
+
+		if (!xa_is_value(entry))
+			continue;
+
+		if ((xa_to_value(entry) & attr) == attr) {
+			has_attr = true;
+			break;
+		}
+
+		if (need_resched()) {
+			xas_pause(&xas);
+			cond_resched_rcu();
+		}
+	}
+	rcu_read_unlock();
+
+	return has_attr;
+}
+
 static u64 kvm_supported_mem_attributes(struct kvm *kvm)
 {
 	if (!kvm || kvm_arch_has_private_mem(kvm))
@@ -2615,6 +2650,14 @@ static int __kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		/* Host-mapped memory cannot be private. */
 		if ((attributes & KVM_MEMORY_ATTRIBUTE_PRIVATE) &&
 		    kvm_is_gmem_mapped(kvm, start, end)) {
+			r = -EPERM;
+			goto out_unlock;
+		}
+
+		/* Unmappable memory cannot be shared. */
+		if (!(attributes & KVM_MEMORY_ATTRIBUTE_PRIVATE) &&
+		     kvm_any_range_has_memory_attribute(kvm, start, end,
+				KVM_MEMORY_ATTRIBUTE_NOT_MAPPABLE)) {
 			r = -EPERM;
 			goto out_unlock;
 		}
