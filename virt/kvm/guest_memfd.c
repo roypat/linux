@@ -5,6 +5,8 @@
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
 
+#include <asm/set_memory.h>
+
 #include "kvm_mm.h"
 
 struct kvm_gmem {
@@ -16,9 +18,14 @@ struct kvm_gmem {
 static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 {
 	struct folio *folio;
+	bool new_folio = false;
 
 	/* TODO: Support huge pages. */
-	folio = filemap_grab_folio(inode->i_mapping, index);
+	folio = filemap_get_folio(inode->i_mapping, index); // is there a way to find out if filemap_grab_folio allocated a new one?
+	if (PTR_ERR(folio) == -ENOENT) {
+		folio = filemap_grab_folio(inode->i_mapping, index);
+		new_folio = true;
+	}
 	if (IS_ERR_OR_NULL(folio))
 		return NULL;
 
@@ -40,6 +47,9 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 
 		folio_mark_uptodate(folio);
 	}
+
+	if(new_folio)
+		set_memory_np((unsigned long) folio_address(folio), folio_nr_pages(folio));
 
 	/*
 	 * Ignore accessed, referenced, and dirty flags.  The memory is
@@ -298,8 +308,13 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	return MF_DELAYED;
 }
 
+static void kvm_gmem_free_folio(struct folio *folio) {
+	set_memory_p((unsigned long) folio_address(folio), folio_nr_pages(folio));
+}
+
 static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
+	.free_folio = kvm_gmem_free_folio,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
 };
