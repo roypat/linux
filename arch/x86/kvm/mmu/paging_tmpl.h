@@ -321,11 +321,16 @@ static int FNAME(walk_addr_generic)(struct guest_walker *walker,
 	gpa_t real_gpa;
 	gfn_t gfn;
 
+	printk("paging64_walk_addr_generic: enter");
+	printk("paging64_walk_addr_genric: trying to resolve gva 0x%llx by doing guest page table walk", (u64) addr);
+
 	trace_kvm_mmu_pagetable_walk(addr, access);
 retry_walk:
 	walker->level = mmu->cpu_role.base.level;
 	pte           = kvm_mmu_get_guest_pgd(vcpu, mmu);
 	have_ad       = PT_HAVE_ACCESSED_DIRTY(mmu);
+
+	printk("paging64_walk_addr_generic: gpa of guest pgd: 0x%llx", (u64) pte);
 
 #if PTTYPE == 64
 	walk_nx_mask = 1ULL << PT64_NX_SHIFT;

@@ -1609,6 +1609,8 @@ static int check_memory_region_flags(struct kvm *kvm,
 	if (kvm_arch_has_private_mem(kvm))
 		valid_flags |= KVM_MEM_GUEST_MEMFD;
 
+	//printk("check_memory_region_flags: kvm_arch_has_private_mem(kvm) = %d", kvm_arch_has_private_mem(kvm));
+
 	/* Dirty logging private memory is not currently supported. */
 	if (mem->flags & KVM_MEM_GUEST_MEMFD)
 		valid_flags &= ~KVM_MEM_LOG_DIRTY_PAGES;
@@ -1622,6 +1624,8 @@ static int check_memory_region_flags(struct kvm *kvm,
 	if (!(mem->flags & KVM_MEM_GUEST_MEMFD))
 		valid_flags |= KVM_MEM_READONLY;
 #endif
+
+	//printk("check_memory_region_flags: passed %x, valid %x", mem->flags, valid_flags);
 
 	if (mem->flags & ~valid_flags)
 		return -EINVAL;
@@ -2027,9 +2031,15 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	int as_id, id;
 	int r;
 
+	printk("__kvm_set_memory_region: guest_phys_addr: %llu, size: %llu, host userspace: %llx", mem->guest_phys_addr, mem->memory_size, mem->userspace_addr);
+
+	//printk("__kvm_set_memory_region: enter");
+
 	r = check_memory_region_flags(kvm, mem);
 	if (r)
 		return r;
+
+	//printk("__kvm_set_memory_region: Flags are valid");
 
 	as_id = mem->slot >> 16;
 	id = (u16)mem->slot;
@@ -2056,6 +2066,8 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		return -EINVAL;
 	if ((mem->memory_size >> PAGE_SHIFT) > KVM_MEM_MAX_NR_PAGES)
 		return -EINVAL;
+
+	//printk("__kvm_set_memory_region: Past initial validations");
 
 	slots = __kvm_memslots(kvm, as_id);
 
@@ -2113,6 +2125,8 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	if (!new)
 		return -ENOMEM;
 
+	//printk("__kvm_set_memory_region: Okay we're past ALL the checks");
+
 	new->as_id = as_id;
 	new->id = id;
 	new->base_gfn = base_gfn;
@@ -2121,14 +2135,17 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	new->userspace_addr = mem->userspace_addr;
 	if (mem->flags & KVM_MEM_GUEST_MEMFD) {
 		r = kvm_gmem_bind(kvm, new, mem->guest_memfd, mem->guest_memfd_offset);
-		if (r)
+		if (r) {
+			//printk("__kvm_set_memory_region: Failed kvm_gmem_bind call");
 			goto out;
+		}
 	}
 
 	r = kvm_set_memslot(kvm, old, new, change);
-	if (r)
+	if (r) {
+		//printk("__kvm_set_memory_region: Failed kvm_set_memslot call");
 		goto out_unbind;
-
+	}
 	return 0;
 
 out_unbind:
@@ -2155,6 +2172,8 @@ EXPORT_SYMBOL_GPL(kvm_set_memory_region);
 static int kvm_vm_ioctl_set_memory_region(struct kvm *kvm,
 					  struct kvm_userspace_memory_region2 *mem)
 {
+	//printk("kvm_vm_ioctl_set_memory_region: enter");
+
 	if ((u16)mem->slot >= KVM_USER_MEM_SLOTS)
 		return -EINVAL;
 
@@ -2642,6 +2661,9 @@ static int __kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 
 	mutex_lock(&kvm->slots_lock);
 
+	//printk("Setting attributes of gfn range from %llu to %llu to %lx", start, end, attributes);
+	//printk("CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE: %d", IS_ENABLED(CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE));
+
 	/* Nothing to do if the entire range as the desired attributes. */
 	if (kvm_range_has_memory_attributes(kvm, start, end, attributes))
 		goto out_unlock;
@@ -2650,6 +2672,7 @@ static int __kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		/* Host-mapped memory cannot be private. */
 		if ((attributes & KVM_MEMORY_ATTRIBUTE_PRIVATE) &&
 		    kvm_is_gmem_mapped(kvm, start, end)) {
+			printk("oh no 1");
 			r = -EPERM;
 			goto out_unlock;
 		}
@@ -2658,6 +2681,7 @@ static int __kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		if (!(attributes & KVM_MEMORY_ATTRIBUTE_PRIVATE) &&
 		     kvm_any_range_has_memory_attribute(kvm, start, end,
 				KVM_MEMORY_ATTRIBUTE_NOT_MAPPABLE)) {
+			printk("oh no 2");
 			r = -EPERM;
 			goto out_unlock;
 		}

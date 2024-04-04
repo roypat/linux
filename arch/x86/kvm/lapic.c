@@ -2606,10 +2606,12 @@ int kvm_alloc_apic_access_page(struct kvm *kvm)
 	void __user *hva;
 	int ret = 0;
 
+
 	mutex_lock(&kvm->slots_lock);
 	if (kvm->arch.apic_access_memslot_enabled ||
-	    kvm->arch.apic_access_memslot_inhibited)
+	    kvm->arch.apic_access_memslot_inhibited) {
 		goto out;
+	}
 
 	hva = __x86_set_memory_region(kvm, APIC_ACCESS_PAGE_PRIVATE_MEMSLOT,
 				      APIC_DEFAULT_PHYS_BASE, PAGE_SIZE);

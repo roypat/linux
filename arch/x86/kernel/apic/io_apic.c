@@ -275,7 +275,9 @@ static inline void io_apic_eoi(unsigned int apic, unsigned int vector)
 unsigned int native_io_apic_read(unsigned int apic, unsigned int reg)
 {
 	struct io_apic __iomem *io_apic = io_apic_base(apic);
-	writel(reg, &io_apic->index);
+	//printk("native_io_apic_read: &io_apic->index: %px (phys: %lx)", &io_apic->index, virt_to_fix((unsigned long) (&io_apic->index)));
+	printk("%px", &io_apic->index);  // 0xffffffffff5fc000
+	writel(reg, &io_apic->index);    // dies on 0xffffffff815efb0c
 	return readl(&io_apic->data);
 }
 

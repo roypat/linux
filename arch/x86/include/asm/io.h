@@ -53,6 +53,17 @@ static inline void name(type val, volatile void __iomem *addr) \
 { asm volatile("mov" size " %0,%1": :reg (val), \
 "m" (*(volatile type __force *)addr) barrier); }
 
+/*
+build_mmio_write(writel, "l", unsigned in, "r", :"memory")
+
+  |
+  V
+
+static inline void writel(unsigned int val, volatile void __iomem *addr) {
+	asm volatile("movl %0:%1": :"r" (val), "m" (*(volatile unsigned int __force *)addr) :"memory");
+}
+ */
+
 build_mmio_read(readb, "b", unsigned char, "=q", :"memory")
 build_mmio_read(readw, "w", unsigned short, "=r", :"memory")
 build_mmio_read(readl, "l", unsigned int, "=r", :"memory")

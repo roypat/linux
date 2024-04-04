@@ -651,6 +651,8 @@ static int ioapic_mmio_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this,
 {
 	struct kvm_ioapic *ioapic = to_ioapic(this);
 	u32 data;
+	printk("ioapic_mmio_write: enter");
+
 	if (!ioapic_in_range(ioapic, addr))
 		return -EOPNOTSUPP;
 
@@ -715,6 +717,8 @@ int kvm_ioapic_init(struct kvm *kvm)
 {
 	struct kvm_ioapic *ioapic;
 	int ret;
+
+	printk("kvm_ioapic_init: enter");
 
 	ioapic = kzalloc(sizeof(struct kvm_ioapic), GFP_KERNEL_ACCOUNT);
 	if (!ioapic)

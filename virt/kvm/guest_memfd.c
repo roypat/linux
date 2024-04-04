@@ -22,6 +22,8 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 	if (IS_ERR_OR_NULL(folio))
 		return NULL;
 
+	// printk("Grabbing a folio at %p!", folio_address(folio));
+
 	/*
 	 * Use the up-to-date flag to track whether or not the memory has been
 	 * zeroed before being handed off to the guest.  There is no backing
@@ -34,6 +36,8 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 	if (!folio_test_uptodate(folio)) {
 		unsigned long nr_pages = folio_nr_pages(folio);
 		unsigned long i;
+
+		//printk("uh oh, dirty folio");
 
 		for (i = 0; i < nr_pages; i++)
 			clear_highpage(folio_page(folio, i));
@@ -274,6 +278,8 @@ static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
 {
 	struct folio *folio;
 
+	//printk("enter: kvm_gmem_fault");
+
 	folio = kvm_gmem_get_folio(file_inode(vmf->vma->vm_file), vmf->pgoff);
 	if (!folio)
 		return VM_FAULT_SIGBUS;
@@ -299,6 +305,8 @@ static const struct vm_operations_struct kvm_gmem_vm_ops = {
 
 static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	//printk("enter: kvm_gmem_mmap");
+
 	/* No support for private mappings to avoid COW.  */
 	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) !=
 	    (VM_SHARED | VM_MAYSHARE)) {
@@ -308,6 +316,8 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 	file_accessed(file);
 	vm_flags_set(vma, VM_DONTDUMP);
 	vma->vm_ops = &kvm_gmem_vm_ops;
+
+	//printk("leave: kvm_gmem_mmap");
 
 	return 0;
 }

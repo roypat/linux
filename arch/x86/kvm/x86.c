@@ -10832,6 +10832,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		if (kvm_check_request(KVM_REQ_NMI, vcpu))
 			process_nmi(vcpu);
 		if (kvm_check_request(KVM_REQ_IOAPIC_EOI_EXIT, vcpu)) {
+			printk("KVM_REQ_IOAPIC_EOI_EXIT");
 			BUG_ON(vcpu->arch.pending_ioapic_eoi > 255);
 			if (test_bit(vcpu->arch.pending_ioapic_eoi,
 				     vcpu->arch.ioapic_handled_vectors)) {
@@ -10842,12 +10843,18 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 				goto out;
 			}
 		}
-		if (kvm_check_request(KVM_REQ_SCAN_IOAPIC, vcpu))
+		if (kvm_check_request(KVM_REQ_SCAN_IOAPIC, vcpu)) {
+			printk("KVM_REQ_SCAN_IOAPIC");
 			vcpu_scan_ioapic(vcpu);
-		if (kvm_check_request(KVM_REQ_LOAD_EOI_EXITMAP, vcpu))
+		}
+		if (kvm_check_request(KVM_REQ_LOAD_EOI_EXITMAP, vcpu)) {
+			printk("KVM_REQ_LOAD_EOI_EXITMAP");
 			vcpu_load_eoi_exitmap(vcpu);
-		if (kvm_check_request(KVM_REQ_APIC_PAGE_RELOAD, vcpu))
+		}
+		if (kvm_check_request(KVM_REQ_APIC_PAGE_RELOAD, vcpu)) {
+			printk("KVM_REQ_APIC_PAGE_RELOAD");
 			kvm_vcpu_reload_apic_access_page(vcpu);
+		}
 #ifdef CONFIG_KVM_HYPERV
 		if (kvm_check_request(KVM_REQ_HV_CRASH, vcpu)) {
 			vcpu->run->exit_reason = KVM_EXIT_SYSTEM_EVENT;
@@ -11105,6 +11112,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		kvm_lapic_sync_from_vapic(vcpu);
 
 	r = static_call(kvm_x86_handle_exit)(vcpu, exit_fastpath);
+	//printk("Return value from kvm_x86_handle_exit: %d", r);
 	return r;
 
 cancel_injection:
@@ -11207,11 +11215,14 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 		 * this point can start executing an instruction.
 		 */
 		vcpu->arch.at_instruction_boundary = false;
+		//printk("guest instruction pointer at: %lu", kvm_rip_read(vcpu));
 		if (kvm_vcpu_running(vcpu)) {
 			r = vcpu_enter_guest(vcpu);
+			//printk("vcpu_enter_guest: %d", r);
 		} else {
 			r = vcpu_block(vcpu);
 		}
+		//printk("vcpu->run->exit_reason: %d", vcpu->run->exit_reason);
 
 		if (r <= 0)
 			break;
@@ -11232,6 +11243,7 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 		}
 
 		if (__xfer_to_guest_mode_work_pending()) {
+			//printk("__xfer_to_guest_mode_work_pending: true");
 			kvm_vcpu_srcu_read_unlock(vcpu);
 			r = xfer_to_guest_mode_handle_work(vcpu);
 			kvm_vcpu_srcu_read_lock(vcpu);

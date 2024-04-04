@@ -5241,6 +5241,7 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 	}
 
 	if (is_page_fault(intr_info)) {
+		printk("got page fault interrupt!");
 		cr2 = vmx_get_exit_qual(vcpu);
 		if (enable_ept && !vcpu->arch.apf.host_apf_flags) {
 			/*
@@ -5337,7 +5338,9 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 
 static __always_inline int handle_external_interrupt(struct kvm_vcpu *vcpu)
 {
+	//printk("enter: handle_external_interrupt");
 	++vcpu->stat.irq_exits;
+	//printk("vcpu %d irq_exits: %llu", vcpu->cpu, vcpu->stat.irq_exits);
 	return 1;
 }
 
@@ -5781,7 +5784,10 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	if (unlikely(allow_smaller_maxphyaddr && !kvm_vcpu_is_legal_gpa(vcpu, gpa)))
 		return kvm_emulate_instruction(vcpu, 0);
 
-	return kvm_mmu_page_fault(vcpu, gpa, error_code, NULL, 0);
+	int ret = kvm_mmu_page_fault(vcpu, gpa, error_code, NULL, 0);
+	if (ret != 1) // 1 = RET_PF_RETRY
+		printk("handle_ept_violation: kvm_mmu_page_fault: %d", ret);
+	return ret;
 }
 
 static int handle_ept_misconfig(struct kvm_vcpu *vcpu)

@@ -4322,6 +4322,9 @@ static int kvm_faultin_pfn_private(struct kvm_vcpu *vcpu,
 {
 	int max_order, r;
 
+	//if(fault->addr >> PAGE_SHIFT < 1024)
+	//	printk("kvm_faultin_pfn_private: guest page fault at gpa 0x%llx", fault->addr);
+
 	if (!kvm_slot_can_be_private(fault->slot)) {
 		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
 		return -EFAULT;
