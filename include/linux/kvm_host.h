@@ -1227,6 +1227,10 @@ void kvm_release_pfn_dirty(kvm_pfn_t pfn);
 void kvm_set_pfn_dirty(kvm_pfn_t pfn);
 void kvm_set_pfn_accessed(kvm_pfn_t pfn);
 
+
+int kvm_access_guest_gfn_start(struct kvm *kvm, gfn_t gfn);
+int kvm_access_guest_gfn_end(struct kvm *kvm, gfn_t gfn);
+
 void kvm_release_pfn(kvm_pfn_t pfn, bool dirty);
 int kvm_read_guest_page(struct kvm *kvm, gfn_t gfn, void *data, int offset,
 			int len);

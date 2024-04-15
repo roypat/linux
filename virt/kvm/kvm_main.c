@@ -56,6 +56,7 @@
 
 #include <asm/processor.h>
 #include <asm/ioctl.h>
+#include <asm/set_memory.h>
 #include <linux/uaccess.h>
 
 #include "coalesced_mmio.h"
@@ -3452,7 +3453,60 @@ static int next_segment(unsigned long len, int offset)
 		return len;
 }
 
+int kvm_access_guest_gfn_start(struct kvm *kvm, gfn_t gfn) {
+	struct kvm_memory_slot *slot;
+	kvm_pfn_t pfn;
+	int r = 0;
+	struct page *page;
+
+	slot = gfn_to_memslot(kvm, gfn);
+	if (!slot)
+		return -EFAULT;
+
+	// no preparation needed if we're not accessing private memory
+	if (!kvm_any_range_has_memory_attribute(kvm, gfn, gfn + 1, KVM_MEMORY_ATTRIBUTE_PRIVATE))
+		return 0;
+
+	r = kvm_gmem_get_pfn_locked(kvm, slot, gfn, &pfn, NULL);
+	if(r)
+		return r;
+
+	page = pfn_to_page(pfn);
+	set_memory_p((unsigned long) page_address(page), 1);
+	unlock_page(page);
+	put_page(page);
+
+	return r;
+}
+
+int kvm_access_guest_gfn_end(struct kvm *kvm, gfn_t gfn) {
+	struct kvm_memory_slot *slot;
+	kvm_pfn_t pfn;
+	int r = 0;
+	struct page *page;
+
+	slot = gfn_to_memslot(kvm, gfn);
+	if (!slot)
+		return -EFAULT;
+
+	// no preparation needed if we're not accessing private memory
+	if (!kvm_any_range_has_memory_attribute(kvm, gfn, gfn + 1, KVM_MEMORY_ATTRIBUTE_PRIVATE))
+		return 0;
+
+	r = kvm_gmem_get_pfn_locked(kvm, slot, gfn, &pfn, NULL);
+	if(r)
+		return r;
+
+	page = pfn_to_page(pfn);
+	set_memory_np((unsigned long) page_address(page), 1);
+	unlock_page(page);
+	put_page(page);
+
+	return r;
+}
+
 #ifdef CONFIG_KVM_GENERIC_PRIVATE_MEM_MAPPABLE
+
 static int __kvm_read_private_guest_page(struct kvm *kvm,
 					 struct kvm_memory_slot *slot,
 					 gfn_t gfn, void *data, int offset,

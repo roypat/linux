@@ -2317,9 +2317,12 @@ static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_o
 	struct pvclock_wall_clock wc;
 	u32 wc_sec_hi;
 	u64 wall_nsec;
+	gfn_t gfn = gpa_to_gfn(wall_clock);
 
 	if (!wall_clock)
 		return;
+
+	kvm_access_guest_gfn_start(kvm, gfn);
 
 	r = kvm_read_guest(kvm, wall_clock, &version, sizeof(version));
 	if (r)
@@ -2349,6 +2352,7 @@ static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_o
 
 	version++;
 	kvm_write_guest(kvm, wall_clock, &version, sizeof(version));
+	kvm_access_guest_gfn_end(kvm, gfn);
 }
 
 static void kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
@@ -3167,13 +3171,16 @@ static void kvm_setup_guest_pvclock(struct kvm_vcpu *v,
 	struct pvclock_vcpu_time_info guest_hv_clock;
 	unsigned long flags;
 
+	gfn_t gfn = gpa_to_gfn(gpc->gpa);
+
+	kvm_access_guest_gfn_start(v->kvm, gfn);
+
 	read_lock_irqsave(&gpc->lock, flags);
 	while (!kvm_gpc_check(gpc, offset + sizeof(guest_hv_clock))) {
 		read_unlock_irqrestore(&gpc->lock, flags);
 
-		if (kvm_gpc_refresh(gpc, offset + sizeof(guest_hv_clock))) {
-			return;
-		}
+		if (kvm_gpc_refresh(gpc, offset + sizeof(guest_hv_clock)))
+			goto out;
 
 		read_lock_irqsave(&gpc->lock, flags);
 	}
@@ -3213,6 +3220,9 @@ static void kvm_setup_guest_pvclock(struct kvm_vcpu *v,
 	read_unlock_irqrestore(&gpc->lock, flags);
 
 	trace_kvm_pvclock_update(v->vcpu_id, &vcpu->hv_clock);
+
+out:
+	kvm_access_guest_gfn_end(v->kvm, gfn);
 }
 
 static int kvm_guest_time_update(struct kvm_vcpu *v)
@@ -7619,8 +7629,10 @@ static int kvm_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
 	offset = addr & (PAGE_SIZE-1);
 	if (WARN_ON(offset + bytes > PAGE_SIZE))
 		bytes = (unsigned)PAGE_SIZE - offset;
+	kvm_access_guest_gfn_start(vcpu->kvm, gpa_to_gfn(gpa));
 	ret = kvm_vcpu_read_guest_page(vcpu, gpa >> PAGE_SHIFT, val,
 				       offset, bytes);
+	kvm_access_guest_gfn_end(vcpu->kvm, gpa_to_gfn(gpa));
 	if (unlikely(ret < 0))
 		return X86EMUL_IO_NEEDED;
 

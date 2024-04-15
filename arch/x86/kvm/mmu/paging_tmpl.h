@@ -402,7 +402,9 @@ retry_walk:
 
 		printk("paging64_walk_addr_generic: guest pgd is in memslot %d", slot->id);
 
+		kvm_access_guest_gfn_start(vcpu->kvm, gpa_to_gfn(real_gpa));
 		ret = kvm_read_guest(vcpu->kvm, real_gpa + offset, &pte, sizeof(pte));
+		kvm_access_guest_gfn_end(vcpu->kvm, gpa_to_gfn(real_gpa));
 		if(unlikely(ret))
 			goto error;
 
