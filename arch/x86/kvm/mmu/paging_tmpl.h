@@ -367,7 +367,6 @@ retry_walk:
 
 	do {
 		struct kvm_memory_slot *slot;
-		unsigned long host_addr;
 
 		pt_access = pte_access;
 		--walker->level;
@@ -401,14 +400,15 @@ retry_walk:
 		if (!kvm_is_visible_memslot(slot))
 			goto error;
 
-		host_addr = gfn_to_hva_memslot_prot(slot, gpa_to_gfn(real_gpa),
-					    &walker->pte_writable[walker->level - 1]);
-		if (unlikely(kvm_is_error_hva(host_addr)))
+		printk("paging64_walk_addr_generic: guest pgd is in memslot %d", slot->id);
+
+		ret = kvm_read_guest(vcpu->kvm, real_gpa + offset, &pte, sizeof(pte));
+		if(unlikely(ret))
 			goto error;
 
-		ptep_user = (pt_element_t __user *)((void *)host_addr + offset);
-		if (unlikely(__get_user(pte, ptep_user)))
-			goto error;
+		printk("paging64_walk_addr_generic: pte read from guest memory is %llu", (u64) pte);
+
+		// this value is used above in FNAME(update_accessed_bit_dirty), so having this set to a bogus value means we are not setting the accessed bit
 		walker->ptep_user[walker->level - 1] = ptep_user;
 
 		trace_kvm_mmu_paging_element(pte, walker->level);
@@ -467,7 +467,7 @@ retry_walk:
 		accessed_dirty &= pte >>
 			(PT_GUEST_DIRTY_SHIFT - PT_GUEST_ACCESSED_SHIFT);
 
-	if (unlikely(!accessed_dirty)) {
+	if (unlikely(!accessed_dirty) && false) {
 		ret = FNAME(update_accessed_dirty_bits)(vcpu, mmu, walker,
 							addr, write_fault);
 		if (unlikely(ret < 0))

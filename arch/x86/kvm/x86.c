@@ -3164,21 +3164,21 @@ static void kvm_setup_guest_pvclock(struct kvm_vcpu *v,
 				    bool force_tsc_unstable)
 {
 	struct kvm_vcpu_arch *vcpu = &v->arch;
-	struct pvclock_vcpu_time_info *guest_hv_clock;
+	struct pvclock_vcpu_time_info guest_hv_clock;
 	unsigned long flags;
 
 	read_lock_irqsave(&gpc->lock, flags);
-	while (!kvm_gpc_check(gpc, offset + sizeof(*guest_hv_clock))) {
+	while (!kvm_gpc_check(gpc, offset + sizeof(guest_hv_clock))) {
 		read_unlock_irqrestore(&gpc->lock, flags);
 
-		if (kvm_gpc_refresh(gpc, offset + sizeof(*guest_hv_clock)))
+		if (kvm_gpc_refresh(gpc, offset + sizeof(guest_hv_clock))) {
 			return;
+		}
 
 		read_lock_irqsave(&gpc->lock, flags);
 	}
 
-	guest_hv_clock = (void *)(gpc->khva + offset);
-
+	kvm_read_guest(v->kvm, gpc->gpa + offset, &guest_hv_clock, sizeof(guest_hv_clock));
 	/*
 	 * This VCPU is paused, but it's legal for a guest to read another
 	 * VCPU's kvmclock, so we really have to follow the specification where
@@ -3186,25 +3186,28 @@ static void kvm_setup_guest_pvclock(struct kvm_vcpu *v,
 	 * it is consistent.
 	 */
 
-	guest_hv_clock->version = vcpu->hv_clock.version = (guest_hv_clock->version + 1) | 1;
+	guest_hv_clock.version = vcpu->hv_clock.version = (guest_hv_clock.version + 1) | 1;
+	// write back only version field, which is at offset 0 in the pvclock_vcpu_time_info structure
+	kvm_write_guest(v->kvm, gpc->gpa + offset + offsetof(struct pvclock_vcpu_time_info, version), &vcpu->hv_clock.version, sizeof(vcpu->hv_clock.version));
 	smp_wmb();
 
 	/* retain PVCLOCK_GUEST_STOPPED if set in guest copy */
-	vcpu->hv_clock.flags |= (guest_hv_clock->flags & PVCLOCK_GUEST_STOPPED);
+	vcpu->hv_clock.flags |= (guest_hv_clock.flags & PVCLOCK_GUEST_STOPPED);
 
 	if (vcpu->pvclock_set_guest_stopped_request) {
 		vcpu->hv_clock.flags |= PVCLOCK_GUEST_STOPPED;
 		vcpu->pvclock_set_guest_stopped_request = false;
 	}
 
-	memcpy(guest_hv_clock, &vcpu->hv_clock, sizeof(*guest_hv_clock));
+	kvm_write_guest(v->kvm, gpc -> gpa + offset, &vcpu->hv_clock, sizeof(guest_hv_clock));
 
 	if (force_tsc_unstable)
-		guest_hv_clock->flags &= ~PVCLOCK_TSC_STABLE_BIT;
+		guest_hv_clock.flags &= ~PVCLOCK_TSC_STABLE_BIT;
 
 	smp_wmb();
 
-	guest_hv_clock->version = ++vcpu->hv_clock.version;
+	guest_hv_clock.version = ++vcpu->hv_clock.version;
+	kvm_write_guest(v->kvm, gpc->gpa + offset + offsetof(struct pvclock_vcpu_time_info, version), &vcpu->hv_clock.version, sizeof(vcpu->hv_clock.version));
 
 	kvm_gpc_mark_dirty_in_slot(gpc);
 	read_unlock_irqrestore(&gpc->lock, flags);
