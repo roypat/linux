@@ -86,6 +86,8 @@
 #include <asm/sgx.h>
 #include <clocksource/hyperv_timer.h>
 
+#include <asm/set_memory.h>
+
 #define CREATE_TRACE_POINTS
 #include "trace.h"
 
@@ -2367,11 +2369,15 @@ static void kvm_write_system_time(struct kvm_vcpu *vcpu, gpa_t system_time,
 	kvm_make_request(KVM_REQ_GLOBAL_CLOCK_UPDATE, vcpu);
 
 	/* we verify if the enable bit is set... */
-	if (system_time & 1)
-		kvm_gpc_activate(&vcpu->arch.pv_time, system_time & ~1ULL,
-				 sizeof(struct pvclock_vcpu_time_info));
-	else
+	if (system_time & 1) {
+		if(!kvm_gpc_activate(&vcpu->arch.pv_time, system_time & ~1ULL,
+				 sizeof(struct pvclock_vcpu_time_info)))
+			set_memory_p((unsigned long long) page_address(pfn_to_page(vcpu->arch.pv_time.pfn)), 1);
+
+	}
+	else {
 		kvm_gpc_deactivate(&vcpu->arch.pv_time);
+	}
 
 	return;
 }
