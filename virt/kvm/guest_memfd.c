@@ -4,6 +4,7 @@
 #include <linux/kvm_host.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/set_memory.h>
 
 #include "kvm_mm.h"
 
@@ -49,9 +50,16 @@ static int kvm_gmem_prepare_folio(struct inode *inode, pgoff_t index, struct fol
 	return 0;
 }
 
+static bool kvm_gmem_not_present(struct inode *inode)
+{
+	return ((unsigned long)inode->i_private & KVM_GMEM_NO_DIRECT_MAP) != 0;
+}
+
 static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool prepare)
 {
 	struct folio *folio;
+	bool zap_direct_map = false;
+	int r;
 
 	/* TODO: Support huge pages. */
 	folio = filemap_grab_folio(inode->i_mapping, index);
@@ -74,16 +82,30 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool
 		for (i = 0; i < nr_pages; i++)
 			clear_highpage(folio_page(folio, i));
 
+		// We need to clear the folio before calling kvm_gmem_prepare_folio,
+		// but can only remove it from the direct map _after_ preparation is done.
+		zap_direct_map = kvm_gmem_not_present(inode);
+
 		folio_mark_uptodate(folio);
 	}
 
 	if (prepare) {
-		int r =	kvm_gmem_prepare_folio(inode, index, folio);
-		if (r < 0) {
-			folio_unlock(folio);
-			folio_put(folio);
-			return ERR_PTR(r);
-		}
+		r = kvm_gmem_prepare_folio(inode, index, folio);
+		if (r < 0)
+			goto out_err;
+	}
+
+	if (zap_direct_map) {
+		r = set_direct_map_invalid_noflush(&folio->page);
+		if (r < 0)
+			goto out_err;
+
+		// We use the private flag to track whether the folio has been removed
+		// from the direct map. This is because inside of ->free_folio,
+		// we do not have access to the address_space anymore, meaning we
+		// cannot check folio_inode(folio)->i_private to determine whether
+		// KVM_GMEM_NO_DIRECT_MAP was set.
+		folio_set_private(folio);
 	}
 
 	/*
@@ -91,6 +113,10 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool
 	 * unevictable and there is no storage to write back to.
 	 */
 	return folio;
+out_err:
+	folio_unlock(folio);
+	folio_put(folio);
+	return ERR_PTR(r);
 }
 
 static void kvm_gmem_invalidate_begin(struct kvm_gmem *gmem, pgoff_t start,
@@ -354,10 +380,22 @@ static void kvm_gmem_free_folio(struct folio *folio)
 }
 #endif
 
+static void kvm_gmem_invalidate_folio(struct folio *folio, size_t start, size_t end)
+{
+	if (start == 0 && end == PAGE_SIZE) {
+		// We only get here if PG_private is set, which only happens if kvm_gmem_not_present
+		// returned true in kvm_gmem_get_folio. Thus no need to do that check again.
+		BUG_ON(set_direct_map_default_noflush(&folio->page));
+
+		folio_clear_private(folio);
+	}
+}
+
 static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
+	.invalidate_folio = kvm_gmem_invalidate_folio,
 #ifdef CONFIG_HAVE_KVM_GMEM_INVALIDATE
 	.free_folio = kvm_gmem_free_folio,
 #endif
@@ -443,7 +481,7 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 {
 	loff_t size = args->size;
 	u64 flags = args->flags;
-	u64 valid_flags = 0;
+	u64 valid_flags = KVM_GMEM_NO_DIRECT_MAP;
 
 	if (flags & ~valid_flags)
 		return -EINVAL;

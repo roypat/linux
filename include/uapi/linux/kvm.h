@@ -1548,4 +1548,6 @@ struct kvm_create_guest_memfd {
 	__u64 reserved[6];
 };
 
+#define KVM_GMEM_NO_DIRECT_MAP                 (1ULL << 0)
+
 #endif /* __LINUX_KVM_H */
