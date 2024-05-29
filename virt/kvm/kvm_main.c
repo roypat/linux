@@ -3597,7 +3597,7 @@ int kvm_write_guest_offset_cached(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 	if (kvm_is_error_hva(ghc->hva))
 		return -EFAULT;
 
-	if (unlikely(!ghc->memslot))
+	if (unlikely(!ghc->memslot || kvm_mem_is_private(kvm, gpa_to_gfn(gpa))))
 		return kvm_write_guest(kvm, gpa, data, len);
 
 	r = __copy_to_user((void __user *)ghc->hva + offset, data, len);
@@ -3635,7 +3635,7 @@ int kvm_read_guest_offset_cached(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
 	if (kvm_is_error_hva(ghc->hva))
 		return -EFAULT;
 
-	if (unlikely(!ghc->memslot))
+	if (unlikely(!ghc->memslot || kvm_mem_is_private(kvm, gpa_to_gfn(gpa))))
 		return kvm_read_guest(kvm, gpa, data, len);
 
 	r = __copy_from_user(data, (void __user *)ghc->hva + offset, len);
