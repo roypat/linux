@@ -90,6 +90,9 @@ bool kvm_gpc_check(struct gfn_to_pfn_cache *gpc, unsigned long len)
 	if (!kvm_gpc_is_valid_len(gpc->gpa, gpc->uhva, len))
 		return false;
 
+	if (gpc->is_private != kvm_mem_is_private(gpc->kvm, gpa_to_gfn(gpc->gpa)))
+		return false;
+
 	if (!gpc->valid)
 		return false;
 
@@ -159,6 +162,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	kvm_pfn_t new_pfn = KVM_PFN_ERR_FAULT;
 	void *new_khva = NULL;
 	unsigned long mmu_seq;
+	gfn_t gfn;
 
 	lockdep_assert_held(&gpc->refresh_lock);
 
@@ -173,6 +177,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 
 	do {
 		mmu_seq = gpc->kvm->mmu_invalidate_seq;
+		gfn = gpa_to_gfn(gpc->gpa);
 		smp_rmb();
 
 		write_unlock_irq(&gpc->lock);
@@ -197,10 +202,19 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			cond_resched();
 		}
 
-		/* We always request a writeable mapping */
-		new_pfn = hva_to_pfn(gpc->uhva, false, false, NULL, true, NULL);
-		if (is_error_noslot_pfn(new_pfn))
-			goto out_error;
+		if (gpc->is_private) {
+			int r = kvm_gmem_get_pfn(gpc->kvm, gfn_to_memslot(gpc->kvm, gfn), gfn,
+						 &new_pfn, NULL);
+
+			if (r)
+				goto out_error;
+		} else {
+			/* We always request a writeable mapping */
+			new_pfn = hva_to_pfn(gpc->uhva, false, false, NULL,
+					     true, NULL);
+			if (is_error_noslot_pfn(new_pfn))
+				goto out_error;
+		}
 
 		/*
 		 * Obtain a new kernel mapping if KVM itself will access the
@@ -252,6 +266,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	unsigned long old_uhva;
 	kvm_pfn_t old_pfn;
 	bool hva_change = false;
+	bool old_private;
 	void *old_khva;
 	int ret;
 
@@ -271,8 +286,21 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	old_pfn = gpc->pfn;
 	old_khva = (void *)PAGE_ALIGN_DOWN((uintptr_t)gpc->khva);
 	old_uhva = PAGE_ALIGN_DOWN(gpc->uhva);
+	old_private = gpc->is_private;
+
+	gpc->is_private = kvm_mem_is_private(gpc->kvm, gpa_to_gfn(gpa));
+
+	if (gpc->is_private && !kvm_can_access_gmem(gpc->kvm)) {
+		ret = -EFAULT;
+		goto out_unlock;
+	}
 
 	if (kvm_is_error_gpa(gpa)) {
+		if (WARN_ON_ONCE(gpc->is_private)) {
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+
 		page_offset = offset_in_page(uhva);
 
 		gpc->gpa = INVALID_GPA;
@@ -316,9 +344,10 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 
 	/*
 	 * If the userspace HVA changed or the PFN was already invalid,
-	 * drop the lock and do the HVA to PFN lookup again.
+	 * drop the lock and do the HVA to PFN lookup again. Also
+	 * recompute the pfn if the gfn changed from shared to private (or vice-versa).
 	 */
-	if (!gpc->valid || hva_change) {
+	if (!gpc->valid || hva_change || gpc->is_private != old_private) {
 		ret = hva_to_pfn_retry(gpc);
 	} else {
 		/*
