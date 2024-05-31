@@ -16,6 +16,9 @@
 #include <linux/highmem.h>
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/pagemap.h>
+
+#include <asm/set_memory.h>
 
 #include "kvm_mm.h"
 
@@ -99,10 +102,68 @@ bool kvm_gpc_check(struct gfn_to_pfn_cache *gpc, unsigned long len)
 	return true;
 }
 
-static void *gpc_map(kvm_pfn_t pfn)
+static int gpc_map_gmem(kvm_pfn_t pfn)
 {
-	if (pfn_valid(pfn))
+	int r = 0;
+	struct folio *folio = pfn_folio(pfn);
+	struct inode *inode = folio_inode(folio);
+
+	if (((unsigned long)inode->i_private & KVM_GMEM_NO_DIRECT_MAP) == 0)
+		goto out;
+
+	/* We need to avoid race conditions where set_memory_np is called for
+	 * pages that other parts of KVM still try to access.  We use the
+	 * PG_private bit for this. If it is set, then the page is removed from
+	 * the direct map. If it is cleared, the page is present in the direct
+	 * map. All changes to this bit, and all modifications of the direct
+	 * map entries for the page happen under the page lock. The _only_
+	 * place where a page will be in the direct map while the page lock is
+	 * _not_ held is if it is inside a gpc. All other parts of KVM that
+	 * temporarily re-insert gmem pages into the direct map (currently only
+	 * guest_{read,write}_page) take the page lock before the direct map
+	 * entry is restored, and hold it until it is zapped again. This means
+	 * - If we reach gpc_map while, say, guest_read_page is operating on
+	 *   this page, we block on acquiring the page lock until
+	 *   guest_read_page is done.
+	 * - If we reach gpc_map while another gpc is already caching this
+	 *   page, the page is present in the direct map and the PG_private
+	 *   flag is cleared. Int his case, we return -EINVAL below to avoid
+	 *   two gpcs caching the same page (since we do not ref-count
+	 *   insertions back into the direct map, when the first cache gets
+	 *   invalidated it would "break" the second cache that assumes the
+	 *   page is present in the direct map until the second cache itself
+	 *   gets invalidated).
+	 * - Lastly, if guest_read_page is called for a page inside of a gpc,
+	 *   it will see that the PG_private flag is cleared, and thus assume
+	 *   it is present in the direct map (and leave the direct map entry
+	 *   untouched). Since it will be holding the page lock, it cannot race
+	 *   with gpc_unmap.
+	 */
+	folio_lock(folio);
+	if (folio_test_private(folio)) {
+		r = set_direct_map_default_noflush(&folio->page);
+		if (r)
+			goto out_unlock;
+
+		folio_clear_private(folio);
+	} else {
+		r = -EINVAL;
+	}
+out_unlock:
+	folio_unlock(folio);
+out:
+	return r;
+}
+
+static void *gpc_map(kvm_pfn_t pfn, bool private)
+{
+	if (pfn_valid(pfn)) {
+		if (private) {
+			if (gpc_map_gmem(pfn))
+				return NULL;
+		}
 		return kmap(pfn_to_page(pfn));
+	}
 
 #ifdef CONFIG_HAS_IOMEM
 	return memremap(pfn_to_hpa(pfn), PAGE_SIZE, MEMREMAP_WB);
@@ -111,13 +172,27 @@ static void *gpc_map(kvm_pfn_t pfn)
 #endif
 }
 
-static void gpc_unmap(kvm_pfn_t pfn, void *khva)
+static void gpc_unmap(kvm_pfn_t pfn, void *khva, bool private)
 {
 	/* Unmap the old pfn/page if it was mapped before. */
 	if (is_error_noslot_pfn(pfn) || !khva)
 		return;
 
 	if (pfn_valid(pfn)) {
+		if (private) {
+			struct folio *folio = pfn_folio(pfn);
+			struct inode *inode = folio_inode(folio);
+
+			if ((unsigned long)inode->i_private &
+			    KVM_GMEM_NO_DIRECT_MAP) {
+				folio_lock(folio);
+				BUG_ON(folio_test_private(folio));
+				BUG_ON(set_direct_map_invalid_noflush(
+					&folio->page));
+				folio_set_private(folio);
+				folio_unlock(folio);
+			}
+		}
 		kunmap(pfn_to_page(pfn));
 		return;
 	}
@@ -195,7 +270,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			 * the existing mapping and didn't create a new one.
 			 */
 			if (new_khva != old_khva)
-				gpc_unmap(new_pfn, new_khva);
+				gpc_unmap(new_pfn, new_khva, gpc->is_private);
 
 			kvm_release_pfn_clean(new_pfn);
 
@@ -224,7 +299,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 		if (new_pfn == gpc->pfn)
 			new_khva = old_khva;
 		else
-			new_khva = gpc_map(new_pfn);
+			new_khva = gpc_map(new_pfn, gpc->is_private);
 
 		if (!new_khva) {
 			kvm_release_pfn_clean(new_pfn);
@@ -379,7 +454,7 @@ out_unlock:
 	write_unlock_irq(&gpc->lock);
 
 	if (unmap_old)
-		gpc_unmap(old_pfn, old_khva);
+		gpc_unmap(old_pfn, old_khva, old_private);
 
 	return ret;
 }
@@ -497,6 +572,6 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		list_del(&gpc->list);
 		spin_unlock(&kvm->gpc_lock);
 
-		gpc_unmap(old_pfn, old_khva);
+		gpc_unmap(old_pfn, old_khva, gpc->is_private);
 	}
 }

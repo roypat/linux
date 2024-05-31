@@ -55,6 +55,7 @@
 
 #include <asm/processor.h>
 #include <asm/ioctl.h>
+#include <asm/set_memory.h>
 #include <linux/uaccess.h>
 
 #include "coalesced_mmio.h"
@@ -3285,8 +3286,8 @@ static int __kvm_read_guest_private_page(struct kvm *kvm,
 					 void *data, int offset, int len)
 {
 	kvm_pfn_t pfn;
-	int r;
-	struct page *page;
+	int r = 0;
+	struct folio *folio;
 	void *kaddr;
 
 	if (!kvm_can_access_gmem(kvm))
@@ -3297,13 +3298,24 @@ static int __kvm_read_guest_private_page(struct kvm *kvm,
 	if (r < 0)
 		return -EFAULT;
 
-	page = pfn_to_page(pfn);
-	lock_page(page);
-	kaddr = page_address(page) + offset;
-	memcpy(data, kaddr, len);
-	unlock_page(page);
-	put_page(page);
-	return 0;
+	folio = pfn_folio(pfn);
+	folio_lock(folio);
+	kaddr = folio_address(folio);
+	if (folio_test_private(folio)) {
+		r = set_direct_map_default_noflush(&folio->page);
+		if (r)
+			goto out_unlock;
+	}
+	memcpy(data, kaddr + offset, len);
+	if (folio_test_private(folio)) {
+		r = set_direct_map_invalid_noflush(&folio->page);
+		if (r)
+			goto out_unlock;
+	}
+out_unlock:
+	folio_unlock(folio);
+	folio_put(folio);
+	return r;
 }
 
 static int __kvm_vcpu_read_guest_private_page(struct kvm_vcpu *vcpu,
@@ -3431,8 +3443,8 @@ static int __kvm_write_guest_private_page(struct kvm *kvm,
 					  const void *data, int offset, int len)
 {
 	kvm_pfn_t pfn;
-	int r;
-	struct page *page;
+	int r = 0;
+	struct folio *folio;
 	void *kaddr;
 
 	if (!kvm_can_access_gmem(kvm))
@@ -3443,14 +3455,25 @@ static int __kvm_write_guest_private_page(struct kvm *kvm,
 	if (r < 0)
 		return -EFAULT;
 
-	page = pfn_to_page(pfn);
-	lock_page(page);
-	kaddr = page_address(page) + offset;
-	memcpy(kaddr, data, len);
-	unlock_page(page);
-	put_page(page);
+	folio = pfn_folio(pfn);
+	folio_lock(folio);
+	kaddr = folio_address(folio);
+	if (folio_test_private(folio)) {
+		r = set_direct_map_default_noflush(&folio->page);
+		if (r)
+			goto out_unlock;
+	}
+	memcpy(kaddr + offset, data, len);
+	if (folio_test_private(folio)) {
+		r = set_direct_map_invalid_noflush(&folio->page);
+		if (r)
+			goto out_unlock;
+	}
 
-	return 0;
+out_unlock:
+	folio_unlock(folio);
+	folio_put(folio);
+	return r;
 }
 
 static int __kvm_vcpu_write_guest_private_page(struct kvm_vcpu *vcpu,
