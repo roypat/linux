@@ -8,10 +8,19 @@ extern const struct address_space_operations secretmem_aops;
 
 static inline bool secretmem_mapping(struct address_space *mapping)
 {
-	return mapping->a_ops == &secretmem_aops;
+	return mapping->flags & AS_INACCESSIBLE;
 }
 
-bool vma_is_secretmem(struct vm_area_struct *vma);
+static inline bool vma_is_secretmem(struct vm_area_struct *vma)
+{
+	struct file *file = vma->vm_file;
+
+	if (!file)
+		return false;
+
+	return secretmem_mapping(file->f_inode->i_mapping);
+}
+
 bool secretmem_active(void);
 
 #else
