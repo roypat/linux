@@ -6374,6 +6374,9 @@ and cannot be resized  (guest_memfd files do however support PUNCH_HOLE).
 	__u64 reserved[6];
   };
 
+  #define GUEST_MEMFD_FLAG_SUPPORT_SHARED       (1ULL << 0)
+  #define GUEST_MEMFD_FLAG_NO_DIRECT_MAP        (1ULL << 1)
+
 Conceptually, the inode backing a guest_memfd file represents physical memory,
 i.e. is coupled to the virtual machine as a thing, not to a "struct kvm".  The
 file itself, which is bound to a "struct kvm", is that instance's view of the
@@ -6399,7 +6402,19 @@ guest_memfd has the GUEST_MEMFD_FLAG_SUPPORT_SHARED set, then the fault will
 always be consumed from guest_memfd, regardless of whether it is a shared or a
 private fault.
 
+When the capability KVM_CAP_GMEM_NO_DIRECT_MAP is upported, the 'flags' field
+supports GUEST_MEMFD_FLAG_NO_DIRECT_MAP. Setting this flag on guest_memfd
+creation ensures memory backing this guest_memfd inode is unmapped from the
+kernel's address space
+
 See KVM_SET_USER_MEMORY_REGION2 for additional details.
+
+Errors:
+
+  ========== ===============================================================
+  EINVAL     The specified `flags` were invalid or not supported.
+  ========== ===============================================================
+
 
 4.143 KVM_PRE_FAULT_MEMORY
 ---------------------------
