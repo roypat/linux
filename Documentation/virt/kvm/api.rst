@@ -6390,6 +6390,19 @@ a single guest_memfd file, but the bound ranges must not overlap).
 
 See KVM_SET_USER_MEMORY_REGION2 for additional details.
 
+The following flags are defined:
+
+KVM_GMEM_NO_DIRECT_MAP
+   Ensure memory backing this guest_memfd inode is unmapped from the kernel's
+   address space. Check KVM_CAP_GMEM_NO_DIRECT_MAP for support.
+
+Errors:
+
+  ========== ===============================================================
+  EINVAL     The specified `flags` were invalid or not supported.
+  ========== ===============================================================
+
+
 4.143 KVM_PRE_FAULT_MEMORY
 ---------------------------
 
