@@ -132,3 +132,6 @@ config HAVE_KVM_ARCH_GMEM_INVALIDATE
 config KVM_GMEM_SUPPORTS_MMAP
        select KVM_GMEM
        bool
+
+config HAVE_KVM_USERFAULT
+       bool
