@@ -49,6 +49,7 @@ config KVM_X86
 	select KVM_GENERIC_GMEM_POPULATE if KVM_SW_PROTECTED_VM
 	select KVM_GMEM_SHARED_MEM if KVM_SW_PROTECTED_VM
 	select KVM_WERROR if WERROR
+	select HAVE_KVM_USERFAULT
 
 config KVM
 	tristate "Kernel-based Virtual Machine (KVM) support"
