@@ -39,6 +39,7 @@ menuconfig KVM
 	select GUEST_PERF_EVENTS if PERF_EVENTS
 	select KVM_GMEM
 	select KVM_GMEM_SUPPORTS_MMAP
+	select HAVE_KVM_USERFAULT
 	help
 	  Support hosting virtualized guest machines.
 
