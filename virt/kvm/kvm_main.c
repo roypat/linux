@@ -4942,6 +4942,10 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_GMEM_SHARED_MEM:
 		return !kvm || kvm_arch_supports_gmem_shared_mem(kvm);
 #endif
+#ifdef CONFIG_HAVE_KVM_USERFAULT
+	case KVM_CAP_USERFAULT:
+		return kvm_has_userfault(kvm);
+#endif
 	default:
 		break;
 	}
