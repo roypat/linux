@@ -961,6 +961,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_ARM_EL2_E2H0 241
 #define KVM_CAP_RISCV_MP_STATE_RESET 242
 #define KVM_CAP_GMEM_MMAP 243
+#define KVM_CAP_GMEM_NO_DIRECT_MAP 244
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1598,6 +1599,7 @@ struct kvm_memory_attributes {
 
 #define KVM_CREATE_GUEST_MEMFD	_IOWR(KVMIO,  0xd4, struct kvm_create_guest_memfd)
 #define GUEST_MEMFD_FLAG_MMAP	(1ULL << 0)
+#define GUEST_MEMFD_FLAG_NO_DIRECT_MAP (1ULL << 1)
 
 struct kvm_create_guest_memfd {
 	__u64 size;

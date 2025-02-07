@@ -65,6 +65,7 @@
 #include <trace/events/kvm.h>
 
 #include <linux/kvm_dirty_ring.h>
+#include <linux/set_memory.h>
 
 
 /* Worst case buffer size needed for holding an integer. */
@@ -4914,6 +4915,10 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 		return kvm_supported_mem_attributes(kvm);
 #endif
 #ifdef CONFIG_KVM_GMEM
+	case KVM_CAP_GMEM_NO_DIRECT_MAP:
+		if (!can_set_direct_map())
+			return false;
+		fallthrough;
 	case KVM_CAP_GUEST_MEMFD:
 		return !kvm || kvm_arch_supports_gmem(kvm);
 #endif
