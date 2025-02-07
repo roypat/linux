@@ -1283,7 +1283,7 @@ static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
 	if ((gup_flags & FOLL_LONGTERM) && vma_is_fsdax(vma))
 		return -EOPNOTSUPP;
 
-	if (vma_is_secretmem(vma))
+	if (vma_is_secretmem(vma) || vma_is_no_direct_map(vma))
 		return -EFAULT;
 
 	if (write) {
@@ -2858,6 +2858,10 @@ static bool gup_fast_folio_allowed(struct folio *folio, unsigned int flags)
 	 */
 	if (check_secretmem && secretmem_mapping(mapping))
 		return false;
+
+	if (mapping_no_direct_map(mapping))
+		return false;
+
 	/* The only remaining allowed file system is shmem. */
 	return !reject_file_backed || shmem_mapping(mapping);
 }
