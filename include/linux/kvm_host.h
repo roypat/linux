@@ -36,6 +36,7 @@
 #include <linux/rbtree.h>
 #include <linux/xarray.h>
 #include <asm/signal.h>
+#include <linux/set_memory.h>
 
 #include <linux/kvm.h>
 #include <linux/kvm_para.h>
@@ -52,7 +53,7 @@
 /*
  * The bit 16 ~ bit 31 of kvm_userspace_memory_region::flags are internally
  * used in kvm, other bits are visible for userspace which are defined in
- * include/linux/kvm_h.
+ * include/linux/kvm_h.<s
  */
 #define KVM_MEMSLOT_INVALID	(1UL << 16)
 
@@ -727,6 +728,12 @@ static inline bool kvm_arch_has_private_mem(struct kvm *kvm)
 	return false;
 }
 #endif
+
+#ifdef CONFIG_KVM_PRIVATE_MEM
+#ifndef kvm_arch_gmem_supports_no_direct_map
+#define kvm_arch_gmem_supports_no_direct_map can_set_direct_map
+#endif
+#endif /* CONFIG_KVM_PRIVATE_MEM */
 
 /*
  * Arch code must define kvm_arch_gmem_supports_shared_mem if support for

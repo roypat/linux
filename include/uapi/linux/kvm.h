@@ -930,6 +930,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_X86_APIC_BUS_CYCLES_NS 237
 #define KVM_CAP_X86_GUEST_MODE 238
 #define KVM_CAP_GMEM_SHARED_MEM 239
+#define KVM_CAP_GMEM_NO_DIRECT_MAP 240
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1572,6 +1573,8 @@ struct kvm_create_guest_memfd {
 	__u64 flags;
 	__u64 reserved[6];
 };
+
+#define KVM_GMEM_NO_DIRECT_MAP			(1ULL << 0)
 
 #define KVM_PRE_FAULT_MEMORY	_IOWR(KVMIO, 0xd5, struct kvm_pre_fault_memory)
 
