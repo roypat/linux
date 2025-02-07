@@ -4,6 +4,7 @@
 #include <linux/kvm_host.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/set_memory.h>
 
 #include "kvm_mm.h"
 
@@ -42,8 +43,20 @@ static int __kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slo
 	return 0;
 }
 
+static bool kvm_gmem_test_no_direct_map(struct inode *inode)
+{
+	return (unsigned long) inode->i_private & KVM_GMEM_NO_DIRECT_MAP;
+}
+
 static inline void kvm_gmem_mark_prepared(struct folio *folio)
 {
+	struct inode *inode = folio_inode(folio);
+
+	if (kvm_gmem_test_no_direct_map(inode)) {
+		if (!set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio), false))
+			folio_set_private_2(folio);
+	}
+
 	folio_mark_uptodate(folio);
 }
 
@@ -353,7 +366,7 @@ static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
 
 	if (!folio_test_uptodate(folio)) {
 		clear_highpage(folio_page(folio, 0));
-		folio_mark_uptodate(folio);
+		kvm_gmem_mark_prepared(folio);
 	}
 
 	vmf->page = folio_file_page(folio, vmf->pgoff);
@@ -454,6 +467,9 @@ static void kvm_gmem_free_folio(struct folio *folio)
 	kvm_pfn_t pfn = page_to_pfn(page);
 	int order = folio_order(folio);
 
+	if (folio_test_private_2(folio))
+		WARN_ON_ONCE(set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio), true));
+
 	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
 }
 #endif
@@ -527,6 +543,9 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	/* Unmovable mappings are supposed to be marked unevictable as well. */
 	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
 
+	if (flags & KVM_GMEM_NO_DIRECT_MAP)
+		mapping_set_no_direct_map(inode->i_mapping);
+
 	kvm_get_kvm(kvm);
 	gmem->kvm = kvm;
 	xa_init(&gmem->bindings);
@@ -546,7 +565,10 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 {
 	loff_t size = args->size;
 	u64 flags = args->flags;
-	u64 valid_flags = 0;
+	u64 valid_flags = KVM_GMEM_NO_DIRECT_MAP;
+
+	if (!can_set_direct_map())
+		valid_flags &= ~KVM_GMEM_NO_DIRECT_MAP;
 
 	if (flags & ~valid_flags)
 		return -EINVAL;
