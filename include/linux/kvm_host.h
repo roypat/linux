@@ -36,6 +36,7 @@
 #include <linux/rbtree.h>
 #include <linux/xarray.h>
 #include <asm/signal.h>
+#include <linux/set_memory.h>
 
 #include <linux/kvm.h>
 #include <linux/kvm_para.h>
@@ -729,6 +730,12 @@ static inline bool kvm_arch_supports_gmem(struct kvm *kvm)
 	return false;
 }
 #endif
+
+#ifdef CONFIG_KVM_GMEM
+#ifndef kvm_arch_gmem_supports_no_direct_map
+#define kvm_arch_gmem_supports_no_direct_map can_set_direct_map
+#endif
+#endif /* CONFIG_KVM_GMEM */
 
 /*
  * Returns true if this VM supports shared mem in guest_memfd.

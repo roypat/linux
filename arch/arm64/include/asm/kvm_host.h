@@ -19,6 +19,7 @@
 #include <linux/maple_tree.h>
 #include <linux/percpu.h>
 #include <linux/psci.h>
+#include <linux/set_memory.h>
 #include <asm/arch_gicv3.h>
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
@@ -1597,5 +1598,15 @@ static inline bool kvm_arch_has_irq_bypass(void)
 #define kvm_arch_supports_gmem(kvm) true
 #define kvm_arch_supports_gmem_shared_mem(kvm) IS_ENABLED(CONFIG_KVM_GMEM_SHARED_MEM)
 #endif
+
+static inline bool kvm_arch_gmem_supports_no_direct_map(void) {
+	/*
+	 * Without FWB, direct map access is needed in kvm_pgtable_stage2_map,
+	 * as it calls dcache_clean_inval_poc
+ 	 */
+	return can_set_direct_map() && cpus_have_final_cap(ARM64_HAS_STAGE2_FWB);
+}
+#define kvm_arch_gmem_supports_no_direct_map kvm_arch_gmem_supports_no_direct_map
+#endif /* CONFIG_KVM_GMEM */
 
 #endif /* __ARM64_KVM_HOST_H__ */
