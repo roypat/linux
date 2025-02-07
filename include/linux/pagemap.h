@@ -335,6 +335,11 @@ static inline bool mapping_inaccessible(struct address_space *mapping)
 	return test_bit(AS_INACCESSIBLE, &mapping->flags);
 }
 
+static inline bool vma_is_inaccessible(const struct vm_area_struct *vma)
+{
+	return vma->vm_file && mapping_inaccessible(vma->vm_file->f_mapping);
+}
+
 static inline gfp_t mapping_gfp_mask(struct address_space * mapping)
 {
 	return mapping->gfp_mask;
