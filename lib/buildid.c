@@ -66,7 +66,7 @@ static int freader_get_folio(struct freader *r, loff_t file_off)
 	freader_put_folio(r);
 
 	/* reject secretmem folios created with memfd_secret() or guest_memfd() */
-	if (secretmem_mapping(r->file->f_mapping) || mapping_no_direct_map(r->file->f_mapping))
+	if (mapping_no_direct_map(r->file->f_mapping))
 		return -EFAULT;
 
 	r->folio = filemap_get_folio(r->file->f_mapping, file_off >> PAGE_SHIFT);
