@@ -544,6 +544,16 @@ static inline uint64_t vm_get_stat(struct kvm_vm *vm, const char *stat_name)
 
 void vm_create_irqchip(struct kvm_vm *vm);
 
+static inline bool backing_src_guest_memfd_flags(enum vm_mem_backing_src_type t)
+{
+	switch (t) {
+	case VM_MEM_SRC_GUEST_MEMFD_NO_DIRECT_MAP:
+		return KVM_GMEM_NO_DIRECT_MAP;
+	default:
+		return 0;
+	}
+}
+
 static inline int __vm_create_guest_memfd(struct kvm_vm *vm, uint64_t size,
 					uint64_t flags)
 {
