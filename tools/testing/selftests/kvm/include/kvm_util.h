@@ -592,6 +592,16 @@ static inline bool is_smt_on(void)
 
 void vm_create_irqchip(struct kvm_vm *vm);
 
+static inline uint32_t backing_src_guest_memfd_flags(enum vm_mem_backing_src_type t)
+{
+	uint32_t flags = GUEST_MEMFD_FLAG_MMAP;
+
+	if (t == VM_MEM_SRC_GUEST_MEMFD_NO_DIRECT_MAP)
+		flags |= GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
+
+	return flags;
+}
+
 static inline int __vm_create_guest_memfd(struct kvm_vm *vm, uint64_t size,
 					uint64_t flags)
 {
