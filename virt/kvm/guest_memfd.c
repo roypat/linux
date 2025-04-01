@@ -5,6 +5,7 @@
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
 #include <linux/set_memory.h>
+#include <linux/userfaultfd_k.h>
 
 #include "kvm_mm.h"
 
@@ -360,6 +361,12 @@ static vm_fault_t kvm_gmem_fault_shared(struct vm_fault *vmf)
 	if (!folio_test_uptodate(folio)) {
 		clear_highpage(folio_page(folio, 0));
 		kvm_gmem_mark_prepared(folio);
+	}
+
+	if (userfaultfd_minor(vmf->vma) &&
+	    !(vmf->flags & FAULT_FLAG_USERFAULT_CONTINUE)) {
+		folio_unlock(folio);
+		return handle_userfault(vmf, VM_UFFD_MINOR);
 	}
 
 	vmf->page = folio_file_page(folio, vmf->pgoff);
