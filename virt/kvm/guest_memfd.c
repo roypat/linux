@@ -7,6 +7,7 @@
 #include <linux/set_memory.h>
 
 #include "kvm_mm.h"
+#include "trace/events/kvm.h"
 
 struct kvm_gmem {
 	struct kvm *kvm;
@@ -60,8 +61,15 @@ static inline void kvm_gmem_mark_prepared(struct folio *folio)
 {
 	struct inode *inode = folio_inode(folio);
 
-	if (kvm_gmem_test_no_direct_map(inode))
-		set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio), false);
+	if (kvm_gmem_test_no_direct_map(inode)) {
+		kvm_pfn_t pfn = folio_pfn(folio);
+		unsigned long order = folio_order(folio);
+
+		int r = set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio), false);
+
+		if (!r)
+			trace_kvm_gmem_direct_map_state_change(pfn, pfn + (1ul << order), false);
+	}
 
 	folio_mark_uptodate(folio);
 }
@@ -486,14 +494,13 @@ static void kvm_gmem_free_folio(struct address_space *mapping,
 				struct folio *folio)
 {
 	struct page *page = folio_page(folio, 0);
-
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 	kvm_pfn_t pfn = page_to_pfn(page);
 	int order = folio_order(folio);
-#endif
 
-	if (kvm_gmem_test_no_direct_map(mapping->host))
-		WARN_ON_ONCE(set_direct_map_valid_noflush(page, folio_nr_pages(folio), true));
+	if (kvm_gmem_test_no_direct_map(mapping->host)) {
+		if (!WARN_ON_ONCE(set_direct_map_valid_noflush(page, folio_nr_pages(folio), true)))
+			trace_kvm_gmem_direct_map_state_change(pfn, pfn + (1ul << order), true);
+	}
 
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
