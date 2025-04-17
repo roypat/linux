@@ -291,6 +291,7 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 
 	return set_memory_valid(addr, nr, valid);
 }
+EXPORT_SYMBOL_NS_GPL(set_direct_map_valid_noflush, "for-kvm-use-only");
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 /*

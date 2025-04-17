@@ -412,6 +412,7 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 
 	return __set_memory((unsigned long)page_to_virt(page), nr, flags);
 }
+EXPORT_SYMBOL_NS_GPL(set_direct_map_valid_noflush, "for-kvm-use-only");
 
 bool kernel_page_present(struct page *page)
 {

@@ -236,3 +236,4 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 
 	return __set_memory(addr, 1, set, clear);
 }
+EXPORT_SYMBOL_NS_GPL(set_direct_map_valid_noflush, "for-kvm-use-only");
