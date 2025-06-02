@@ -6465,7 +6465,7 @@ case, the ioctl can be called in parallel.
 
 When the ioctl returns, the input values are updated to point to the
 remaining range.  If `size` > 0 on return, the caller can just issue
-the ioctl again with the same `struct kvm_map_memory` argument.
+the ioctl again with the same `struct kvm_pre_fault_memory` argument.
 
 Shadow page tables cannot support this ioctl because they
 are indexed by virtual address or nested guest physical address.
