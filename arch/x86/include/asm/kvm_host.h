@@ -924,7 +924,7 @@ struct kvm_vcpu_arch {
 	s8  pvclock_tsc_shift;
 	u32 pvclock_tsc_mul;
 	unsigned int hw_tsc_khz;
-	struct gfn_to_pfn_cache pv_time;
+	gpa_t system_time;
 	/* set guest stopped flag in pvclock flags field */
 	bool pvclock_set_guest_stopped_request;
 
