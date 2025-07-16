@@ -326,6 +326,9 @@ static void test_gmem_flag_validity(void)
 	if (kvm_has_cap(KVM_CAP_GMEM_MMAP))
 		non_coco_vm_valid_flags = GUEST_MEMFD_FLAG_MMAP;
 
+	if (kvm_has_cap(KVM_CAP_GMEM_NO_DIRECT_MAP))
+		non_coco_vm_valid_flags = GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
+
 	test_vm_type_gmem_flag_validity(VM_TYPE_DEFAULT, non_coco_vm_valid_flags);
 
 #ifdef __x86_64__
@@ -348,6 +351,10 @@ int main(int argc, char *argv[])
 		test_with_type(VM_TYPE_DEFAULT, GUEST_MEMFD_FLAG_MMAP,
 			       true);
 	}
+
+	if (kvm_has_cap(KVM_CAP_GMEM_NO_DIRECT_MAP))
+		test_with_type(VM_TYPE_DEFAULT, GUEST_MEMFD_FLAG_MMAP | GUEST_MEMFD_FLAG_NO_DIRECT_MAP,
+			       true);
 
 #ifdef __x86_64__
 	test_with_type(KVM_X86_SW_PROTECTED_VM, 0, false);
