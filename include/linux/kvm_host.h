@@ -731,6 +731,15 @@ static inline bool kvm_arch_has_private_mem(struct kvm *kvm)
 bool kvm_arch_supports_gmem_mmap(struct kvm *kvm);
 #endif
 
+#ifdef CONFIG_KVM_GUEST_MEMFD
+#ifndef kvm_arch_gmem_supports_no_direct_map
+static inline bool kvm_arch_gmem_supports_no_direct_map(void)
+{
+	return false;
+}
+#endif
+#endif /* CONFIG_KVM_GUEST_MEMFD */
+
 #ifndef kvm_arch_has_readonly_mem
 static inline bool kvm_arch_has_readonly_mem(struct kvm *kvm)
 {
