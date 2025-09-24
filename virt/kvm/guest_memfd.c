@@ -68,7 +68,8 @@ static int kvm_gmem_folio_zap_direct_map(struct folio *folio)
 		goto out;
 
 	folio->private = (void *) KVM_GMEM_FOLIO_NO_DIRECT_MAP;
-	flush_tlb_kernel_range(addr, addr + folio_size(folio));
+	if (!(gmem_flags & GUEST_MEMFD_FLAG_SKIP_DIRECT_MAP_TLB_FLUSH))
+		flush_tlb_kernel_range(addr, addr + folio_size(folio));
 
 out:
 	return r;
@@ -581,8 +582,12 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 	if (kvm_arch_supports_gmem_mmap(kvm))
 		valid_flags |= GUEST_MEMFD_FLAG_MMAP;
 
-	if (kvm_arch_gmem_supports_no_direct_map())
+	if (kvm_arch_gmem_supports_no_direct_map()) {
 		valid_flags |= GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
+
+		if (kvm_arch_gmem_supports_skip_direct_map_tlb_flush())
+			valid_flags |= GUEST_MEMFD_FLAG_SKIP_DIRECT_MAP_TLB_FLUSH;
+	}
 
 	if (flags & ~valid_flags)
 		return -EINVAL;

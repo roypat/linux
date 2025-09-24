@@ -4916,6 +4916,10 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 		return kvm_supported_mem_attributes(kvm);
 #endif
 #ifdef CONFIG_KVM_GUEST_MEMFD
+	case KVM_CAP_GUEST_MEMFD_SKIP_DIRECT_MAP_TLB_FLUSH:
+		if (!kvm_arch_gmem_supports_skip_direct_map_tlb_flush())
+			return 0;
+		fallthrough;
 	case KVM_CAP_GUEST_MEMFD_NO_DIRECT_MAP:
 		if (!kvm_arch_gmem_supports_no_direct_map())
 			return 0;

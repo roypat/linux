@@ -6428,6 +6428,21 @@ supports GUEST_MEMFD_FLAG_NO_DIRECT_MAP. Setting this flag makes the guest_memfd
 instance behave similarly to memfd_secret, and unmaps the memory backing it from
 the kernel's address space before being passed off to userspace or the guest.
 
+Additionally, when the capability KVM_CAP_GUEST_MEMFD_SKIP_DIRECT_MAP_TLB_FLUSH is supported,
+GUEST_MEMFD_FLAG_SKIP_DIRECT_MAP_TLB_FLUSH can be specified in 'flags', which
+makes KVM skip TLB flushes after unmapping memory. This reduces the protections
+offered by GUEST_MEMFD_FLAG_NO_DIRECT_MAP, as now even after unmapping guest_memfd
+from the kernel's page table, speculative accesses through stale TLB entries are
+possible until these entries get naturally evicted.  It is theoretically possible
+for TLB entries to be artificially kept alive indefinitely, and become the target
+of a speculative execution attack at any point in time after the memory has been
+mapped into the guest. This makes the exact security properties when using this
+flag hard to reason about. However, the finite nature of TLBs means that
+most of guest memory will remain inaccessible, and the requirement to know which
+pfn to target before it is even mapped into the guest makes exploiting difficult,
+making this flag an acceptable trade-off in scenarios where the performance impact
+of TLB flushing is not acceptable.
+
 See KVM_SET_USER_MEMORY_REGION2 for additional details.
 
 4.143 KVM_PRE_FAULT_MEMORY

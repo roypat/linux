@@ -738,6 +738,12 @@ static inline bool kvm_arch_gmem_supports_no_direct_map(void)
 	return false;
 }
 #endif
+#ifndef kvm_arch_gmem_supports_skip_direct_map_tlb_flush
+static inline bool kvm_arch_gmem_supports_skip_direct_map_tlb_flush(void)
+{
+	return false;
+}
+#endif
 #endif /* CONFIG_KVM_GUEST_MEMFD */
 
 #ifndef kvm_arch_has_readonly_mem

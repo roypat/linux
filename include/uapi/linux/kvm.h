@@ -964,6 +964,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_ARM_CACHEABLE_PFNMAP_SUPPORTED 243
 #define KVM_CAP_GUEST_MEMFD_MMAP 244
 #define KVM_CAP_GUEST_MEMFD_NO_DIRECT_MAP 245
+#define KVM_CAP_GUEST_MEMFD_SKIP_DIRECT_MAP_TLB_FLUSH 246
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1602,6 +1603,7 @@ struct kvm_memory_attributes {
 #define KVM_CREATE_GUEST_MEMFD	_IOWR(KVMIO,  0xd4, struct kvm_create_guest_memfd)
 #define GUEST_MEMFD_FLAG_MMAP	(1ULL << 0)
 #define GUEST_MEMFD_FLAG_NO_DIRECT_MAP (1ULL << 1)
+#define GUEST_MEMFD_FLAG_SKIP_DIRECT_MAP_TLB_FLUSH (1ULL << 2)
 
 struct kvm_create_guest_memfd {
 	__u64 size;
