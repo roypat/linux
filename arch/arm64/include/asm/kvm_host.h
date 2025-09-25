@@ -1706,4 +1706,16 @@ static inline bool kvm_arch_has_irq_bypass(void)
 void compute_fgu(struct kvm *kvm, enum fgt_group_id fgt);
 void get_reg_fixed_bits(struct kvm *kvm, enum vcpu_sysreg reg, u64 *res0, u64 *res1);
 void check_feature_map(void);
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+static inline bool kvm_arch_gmem_supports_no_direct_map(void)
+{
+	/*
+	 * Without FWB, direct map access is needed in kvm_pgtable_stage2_map(),
+	 * as it calls dcache_clean_inval_poc().
+	 */
+	return can_set_direct_map() && cpus_have_final_cap(ARM64_HAS_STAGE2_FWB);
+}
+#define kvm_arch_gmem_supports_no_direct_map kvm_arch_gmem_supports_no_direct_map
+#endif /* CONFIG_KVM_GUEST_MEMFD */
 #endif /* __ARM64_KVM_HOST_H__ */
