@@ -6455,6 +6455,11 @@ guest_memfd has the GUEST_MEMFD_FLAG_MMAP set, then the fault will always be
 consumed from guest_memfd, regardless of whether it is a shared or a private
 fault.
 
+When the capability KVM_CAP_GUEST_MEMFD_NO_DIRECT_MAP is supported, the 'flags' field
+supports GUEST_MEMFD_FLAG_NO_DIRECT_MAP. Setting this flag makes the guest_memfd
+instance behave similarly to memfd_secret, and unmaps the memory backing it from
+the kernel's address space before being passed off to userspace or the guest.
+
 See KVM_SET_USER_MEMORY_REGION2 for additional details.
 
 4.143 KVM_PRE_FAULT_MEMORY
